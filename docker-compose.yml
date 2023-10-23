@@ -1,0 +1,8 @@
+version: '3.5'
+services:
+  rst_attack:
+    image: attack
+    build:
+      context: .
+      dockerfile: Dockerfile
+    privileged: true
