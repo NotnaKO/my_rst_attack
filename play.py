@@ -1,7 +1,6 @@
 import logging
 import random
 import socket
-import struct
 import time
 from logging import debug
 from socket import create_connection
@@ -9,10 +8,13 @@ from socketserver import ThreadingTCPServer, BaseRequestHandler
 from threading import Thread
 
 
-
 def a_func(sock: socket.socket, addr: (int, int)):
     while True:
-        sock.sendall(b"begin")
+        try:
+            sock.sendall(b"begin")
+        except ConnectionResetError:
+            logging.info("Successful RST attack")
+            break
         debug(f"Message from client {addr} sent")
         data = sock.recv(1024)
         if not data:
@@ -23,15 +25,19 @@ def a_func(sock: socket.socket, addr: (int, int)):
         assert expected == data
         debug(f"Client {addr} finished iteration")
 
-        time.sleep(5)
+        time.sleep(1)
     sock.close()
 
 
 class Handler(BaseRequestHandler):
     def handle(self):
-        cnt = 0
+        self.request.settimeout(3)
         while True:
-            data = self.request.recv(1024)
+            try:
+                data = self.request.recv(1024)
+            except TimeoutError:
+                logging.info("Server timeout")
+                break
             debug(f"Server get {data}")
             if not data:
                 break
@@ -42,10 +48,6 @@ class Handler(BaseRequestHandler):
             self.request.sendto(
                 f"{self.client_address[0]}+{self.client_address[1]}".encode("utf-8"),
                 self.client_address)
-            # cnt += 1
-            # if cnt == 2:
-            #     self.request.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
-            #     self.request.close()
             debug("Server finished iteration")
 
 
